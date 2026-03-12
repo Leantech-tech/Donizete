@@ -1,0 +1,49 @@
+﻿Analyzing Donizete...                                           
+
+warning - Unused import: 'pages/home_page.dart' - lib\main.dart:5:8 - unused_import
+   info - Unnecessary 'this.' qualifier - lib\models\cliente_model.dart:118:45 - unnecessary_this
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\auth_page.dart:67:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\auth_page.dart:79:52 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\pages\clientes_page.dart:354:20 - unnecessary_to_list_in_spreads
+warning - The value of the local variable 'fieldWidth' isn't used - lib\pages\clientes_page.dart:574:11 - unused_local_variable
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\pages\clientes_page.dart:591:25 - deprecated_member_use
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\pages\clientes_page.dart:626:25 - deprecated_member_use
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\pages\clientes_page.dart:643:21 - deprecated_member_use
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\pages\clientes_page.dart:674:21 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pages\clientes_page.dart:693:21 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pages\clientes_page.dart:810:25 - deprecated_member_use
+warning - The value of the local variable 'aspectRatio' isn't used - lib\pages\dashboard_page.dart:134:24 - unused_local_variable
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\dashboard_page.dart:209:26 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\dashboard_page.dart:214:41 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\dashboard_page.dart:226:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\dashboard_page.dart:236:36 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\home_page.dart:218:48 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps - lib\pages\lancamentos_page.dart:427:7 - use_build_context_synchronously
+  error - In constant expressions, operands of this operator must be of type 'bool', 'num', 'String' or 'null' - lib\pages\lancamentos_page.dart:519:73 - const_eval_type_bool_num_string
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\lancamentos_page.dart:547:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\lancamentos_page.dart:559:50 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pages\lancamentos_page.dart:779:29 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pages\lancamentos_page.dart:871:23 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\lancamentos_page.dart:1087:87 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\lancamentos_page.dart:1090:89 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\pages\lancamentos_page.dart:1288:11 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\pages\relatorio_page.dart:399:20 - unnecessary_to_list_in_spreads
+   info - Unnecessary use of 'toList' in a spread - lib\pages\relatorio_page.dart:494:16 - unnecessary_to_list_in_spreads
+   info - Unnecessary use of 'toList' in a spread - lib\pages\relatorio_page.dart:526:22 - unnecessary_to_list_in_spreads
+   info - Unnecessary use of 'toList' in a spread - lib\pages\relatorio_page.dart:530:16 - unnecessary_to_list_in_spreads
+   info - Unnecessary use of 'toList' in a spread - lib\pages\relatorio_page.dart:800:20 - unnecessary_to_list_in_spreads
+   info - Don't use 'BuildContext's across async gaps - lib\pages\relatorio_page.dart:818:28 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\relatorio_page.dart:866:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\relatorio_page.dart:878:50 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\relatorio_page.dart:1146:84 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\relatorio_page.dart:1165:84 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\relatorio_page.dart:1205:58 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\relatorio_page.dart:1207:77 - deprecated_member_use
+  error - Expected to find ')' - lib\pages\relatorio_page.dart:1367:17 - expected_token
+  error - Expected to find ')' - lib\pages\relatorio_page.dart:1447:15 - expected_token
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\relatorio_page.dart:1463:26 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\relatorio_page.dart:1468:41 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\pages\relatorio_page.dart:1475:28 - deprecated_member_use
+   info - The private field _printerWidth could be 'final' - lib\services\bluetooth_printer_service.dart:48:7 - prefer_final_fields
+   info - 'connectedSystemDevices' is deprecated and shouldn't be used. Use systemDevices instead - lib\services\bluetooth_printer_service.dart:95:51 - deprecated_member_use
+
