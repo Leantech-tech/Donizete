@@ -1,11 +1,13 @@
-# Estágio 1: Build
-FROM debian:latest AS build-env
+# Estágio 1: Build do Flutter
+FROM debian:bookworm-slim AS build-env
 
+# Instala dependências básicas atualizadas (sem o libgconf-2-4)
 RUN apt-get update && apt-get install -y \
-    curl git wget unzip libgconf-2-4 gdb libstdc++6 libglu1-mesa \
+    curl git wget unzip gdb libstdc++6 libglu1-mesa \
     fonts-droid-fallback python3 xz-utils \
     && apt-get clean
 
+# Baixa o Flutter SDK
 RUN git clone https://github.com/flutter/flutter.git -b stable /usr/local/flutter
 ENV PATH="/usr/local/flutter/bin:/usr/local/flutter/bin/cache/dart-sdk/bin:${PATH}"
 
@@ -14,7 +16,7 @@ RUN flutter config --enable-web
 WORKDIR /app
 COPY . .
 
-# ESTA LINHA É A CHAVE: Ela procura onde está o pubspec e entra na pasta automaticamente
+# Entra na pasta do projeto e compila
 RUN cd $(dirname $(find . -name pubspec.yaml -print -quit)) && \
     flutter pub get && \
     flutter build web --release --no-pub
@@ -22,9 +24,6 @@ RUN cd $(dirname $(find . -name pubspec.yaml -print -quit)) && \
 # Estágio 2: Nginx
 FROM nginx:alpine
 RUN rm -rf /usr/share/nginx/html/*
-
-# Busca o resultado do build onde quer que ele tenha sido gerado
 COPY --from=build-env /app/**/build/web /usr/share/nginx/html
-
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
