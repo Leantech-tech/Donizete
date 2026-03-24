@@ -14,18 +14,15 @@ RUN flutter config --enable-web
 WORKDIR /app
 COPY . .
 
-# Comando que busca o pubspec.yaml e faz o build onde quer que ele esteja
-RUN find . -name "pubspec.yaml" -execdir flutter pub get \; \
-    && find . -name "pubspec.yaml" -execdir flutter build web --release \;
+# Roda o build (gera a pasta build/web)
+RUN flutter pub get && flutter build web --release
 
-# Estágio de Servidor (Nginx)
+# Estágio de Servidor
 FROM nginx:alpine
 RUN rm -rf /usr/share/nginx/html/*
 
-# Busca a pasta build/web gerada e move o CONTEÚDO para a raiz do Nginx
-RUN mkdir -p /temp_build
-COPY --from=build-env /app /temp_build
-RUN find /temp_build -type d -name "web" -path "*/build/web" -exec cp -r {}/. /usr/share/nginx/html/ \;
+# Copia o conteúdo da pasta gerada para a pasta padrão do Nginx
+COPY --from=build-env /app/build/web /usr/share/nginx/html
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

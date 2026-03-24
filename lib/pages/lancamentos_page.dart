@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart'; // Added for kIsWeb
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -221,9 +222,11 @@ class _LancamentosPageState extends State<LancamentosPage> {
       }
 
       // Insert items
-      final itensToInsert = itens.map((item) => {
-        ...item.toJson(),
-        'cabecalho_id': cabecalhoId,
+      final itensToInsert = itens.map((item) {
+        final map = item.toJson();
+        map.remove('id'); // Remove ID to avoid Postgrest null constraint issues
+        map['cabecalho_id'] = cabecalhoId;
+        return map;
       }).toList();
 
       await SupabaseService.client.from('lancto_itens').insert(itensToInsert);
@@ -272,7 +275,8 @@ class _LancamentosPageState extends State<LancamentosPage> {
   }
 
   Future<void> _printLancamento(LancamentoCabecalho lancamento) async {
-    // Fetch items for printing
+    try {
+      // Fetch items for printing
     final itemsResponse = await SupabaseService.client
         .from('lancto_itens')
         .select('*, produtos(nome, vr_venda)')
@@ -289,17 +293,24 @@ class _LancamentosPageState extends State<LancamentosPage> {
         .single();
     final cliente = Cliente.fromJson(clienteResponse);
 
+    final font = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+
     final pdf = pw.Document();
+    // Calculate total including discounts
+    double totalRecibo = printItens.fold(0, (sum, item) => sum + item.subtotal);
 
     pdf.addPage(
       pw.Page(
-        pageFormat: const PdfPageFormat(
-          80 * PdfPageFormat.mm,
-          200 * PdfPageFormat.mm,
-          marginLeft: 5 * PdfPageFormat.mm,
-          marginRight: 10 * PdfPageFormat.mm,
-          marginTop: 5 * PdfPageFormat.mm,
-          marginBottom: 5 * PdfPageFormat.mm,
+        theme: pw.ThemeData.withFont(
+          base: font,
+          bold: fontBold,
+        ),
+        pageFormat: PdfPageFormat.roll80.copyWith(
+          marginLeft: 10,
+          marginRight: 2,
+          marginTop: 10,
+          marginBottom: 10,
         ),
         build: (pw.Context context) {
           return pw.Column(
@@ -356,14 +367,9 @@ class _LancamentosPageState extends State<LancamentosPage> {
                 final rawItem = entry.value;
                 final item = printItens[index];
                 
-                // Get standard price from product table
-                final produtos = rawItem['produtos'];
-                double standardPrice = item.vrVenda;
-                if (produtos is Map) {
-                  standardPrice = double.tryParse(produtos['vr_venda']?.toString() ?? '0') ?? item.vrVenda;
-                } else if (produtos is List && produtos.isNotEmpty) {
-                  standardPrice = double.tryParse(produtos[0]['vr_venda']?.toString() ?? '0') ?? item.vrVenda;
-                }
+                // Use unit price after discount
+                final unitPrice = item.vrVenda - item.vrDesconto;
+                final printableSubtotal = item.subtotal;
 
                 return pw.Container(
                   margin: const pw.EdgeInsets.symmetric(vertical: 2),
@@ -380,11 +386,11 @@ class _LancamentosPageState extends State<LancamentosPage> {
                       ),
                       pw.Expanded(
                         flex: 4, 
-                        child: pw.Text(_numberFormat.format(standardPrice), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 9), maxLines: 1),
+                        child: pw.Text(_numberFormat.format(unitPrice), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 9), maxLines: 1),
                       ),
                       pw.Expanded(
                         flex: 4, 
-                        child: pw.Text(_numberFormat.format(item.subtotal), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 9), maxLines: 1),
+                        child: pw.Text(_numberFormat.format(printableSubtotal), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 9), maxLines: 1),
                       ),
                     ],
                   ),
@@ -394,12 +400,12 @@ class _LancamentosPageState extends State<LancamentosPage> {
               pw.Align(
                 alignment: pw.Alignment.centerRight,
                 child: pw.Text(
-                  'TOTAL: ${_currencyFormat.format(lancamento.vrTotalVenda)}',
+                  'TOTAL: ${_currencyFormat.format(totalRecibo)}',
                   style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
                 ),
               ),
               pw.SizedBox(height: 20),
-              pw.Center(child: pw.Text('Obrigado pela preferencia!', style: pw.TextStyle(fontSize: 10))),
+              pw.Center(child: pw.Text('Obrigado pela preferência!', style: const pw.TextStyle(fontSize: 10))),
               pw.SizedBox(height: 30),
               pw.Center(
                 child: pw.Column(
@@ -420,10 +426,19 @@ class _LancamentosPageState extends State<LancamentosPage> {
 
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     _showReprintDialog(lancamento, () => _printLancamento(lancamento));
+    } catch (e) {
+      _showSnackBar('Erro ao gerar PDF: $e', isError: true);
+    }
   }
 
   Future<void> _printBluetoothLancamento(LancamentoCabecalho lancamento) async {
-    // Fetch items for printing
+    if (kIsWeb) {
+      _showSnackBar('Impressão Bluetooth não é suportada no navegador. Use "Imprimir PDF".', isError: true);
+      return;
+    }
+
+    try {
+      // Fetch items for printing
     final itemsResponse = await SupabaseService.client
         .from('lancto_itens')
         .select('*, produtos(nome, vr_venda)')
@@ -443,23 +458,17 @@ class _LancamentosPageState extends State<LancamentosPage> {
     final success = await BluetoothPrinterService.connectAndPrint(
       context,
       printFunction: () async {
-        final items = rawItems.asMap().entries.map((entry) {
-          final index = entry.key;
-          final rawItem = entry.value;
-          final item = printItens[index];
-
-          final produtos = rawItem['produtos'];
-          double standardPrice = item.vrVenda;
-          if (produtos is Map) {
-            standardPrice = double.tryParse(produtos['vr_venda']?.toString() ?? '0') ?? item.vrVenda;
-          } else if (produtos is List && produtos.isNotEmpty) {
-            standardPrice = double.tryParse(produtos[0]['vr_venda']?.toString() ?? '0') ?? item.vrVenda;
-          }
+        double totalRecibo = 0;
+        final items = printItens.map((item) {
+          final unitPrice = item.vrVenda - item.vrDesconto;
+          final printableSubtotal = item.subtotal;
+          totalRecibo += printableSubtotal;
 
           return {
             'name': item.produtoNome ?? '',
             'qty': '${item.quantidade}',
-            'price': _currencyFormat.format(standardPrice),
+            'price': _currencyFormat.format(unitPrice),
+            'total': _currencyFormat.format(printableSubtotal),
           };
         }).toList();
 
@@ -479,7 +488,7 @@ class _LancamentosPageState extends State<LancamentosPage> {
           title: 'RECIBO',
           subtitle: subtitle,
           items: items,
-          total: _currencyFormat.format(lancamento.vrTotalVenda),
+          total: _currencyFormat.format(totalRecibo),
           footer: 'Obrigado pela preferencia!\n\n--------------------------------\n      Assinatura',
         );
       },
@@ -488,10 +497,14 @@ class _LancamentosPageState extends State<LancamentosPage> {
     if (success) {
       _showReprintDialog(lancamento, () => _printBluetoothLancamento(lancamento));
     }
+    } catch (e) {
+      _showSnackBar('Erro ao imprimir via Bluetooth: $e', isError: true);
+    }
   }
 
   Future<void> _printMinimalistLancamento(LancamentoCabecalho lancamento) async {
-    // Fetch items for printing
+    try {
+      // Fetch items for printing
     final itemsResponse = await SupabaseService.client
         .from('lancto_itens')
         .select('*, produtos(nome)')
@@ -509,17 +522,22 @@ class _LancamentosPageState extends State<LancamentosPage> {
 
     final totalQtd = printItens.fold<int>(0, (sum, item) => sum + item.quantidade);
 
+    final font = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+
     final pdf = pw.Document();
 
     pdf.addPage(
       pw.Page(
-        pageFormat: const PdfPageFormat(
-          80 * PdfPageFormat.mm,
-          200 * PdfPageFormat.mm,
-          marginLeft: 5 * PdfPageFormat.mm,
-          marginRight: 10 * PdfPageFormat.mm,
-          marginTop: 5 * PdfPageFormat.mm,
-          marginBottom: 5 * PdfPageFormat.mm,
+        theme: pw.ThemeData.withFont(
+          base: font,
+          bold: fontBold,
+        ),
+        pageFormat: PdfPageFormat.roll80.copyWith(
+          marginLeft: 10,
+          marginRight: 2,
+          marginTop: 10,
+          marginBottom: 10,
         ),
         build: (pw.Context context) {
           return pw.Column(
@@ -556,6 +574,9 @@ class _LancamentosPageState extends State<LancamentosPage> {
 
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     _showReprintDialog(lancamento, () => _printMinimalistLancamento(lancamento));
+    } catch (e) {
+      _showSnackBar('Erro ao gerar resumo (PDF): $e', isError: true);
+    }
   }
 
 

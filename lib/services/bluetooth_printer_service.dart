@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // Added for kIsWeb
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
@@ -73,6 +74,7 @@ class BluetoothPrinterService {
 
   /// Verifica se o Bluetooth está ligado
   Future<bool> isBluetoothOn() async {
+    if (kIsWeb) return false;
     try {
       final state = await FlutterBluePlus.adapterState.first;
       return state == BluetoothAdapterState.on;
@@ -84,6 +86,7 @@ class BluetoothPrinterService {
 
   /// Retorna a lista de dispositivos Bluetooth pareados e conectados pelo sistema
   Future<List<BluetoothDevice>> getBondedDevices() async {
+    if (kIsWeb) return [];
     try {
       // Garante permissões antes de buscar
       await requestPermissions();
@@ -141,6 +144,7 @@ class BluetoothPrinterService {
 
   /// Conecta à impressora Bluetooth
   Future<bool> connect(BluetoothDevice device) async {
+    if (kIsWeb) return false;
     try {
       // Desconecta dispositivo anterior se houver
       await disconnect();

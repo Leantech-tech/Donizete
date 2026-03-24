@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart'; // Added for kIsWeb
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
@@ -309,9 +310,15 @@ class _ClientesPageState extends State<ClientesPage> {
   Future<void> _printClientesPdf(List<Cliente> filteredClientes) async {
     try {
       final pdf = pw.Document();
+      final font = await PdfGoogleFonts.robotoRegular();
+      final fontBold = await PdfGoogleFonts.robotoBold();
 
       pdf.addPage(
         pw.MultiPage(
+          theme: pw.ThemeData.withFont(
+            base: font,
+            bold: fontBold,
+          ),
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(32),
           build: (context) => [
@@ -368,6 +375,10 @@ class _ClientesPageState extends State<ClientesPage> {
   }
 
   Future<void> _printClientesBluetooth(List<Cliente> filteredClientes) async {
+    if (kIsWeb) {
+      _showSnackBar('Impressão Bluetooth não é suportada no navegador. Use PDF.', isError: true);
+      return;
+    }
     final success = await BluetoothPrinterService.connectAndPrint(
       context,
       printFunction: () async {

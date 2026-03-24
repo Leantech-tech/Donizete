@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart'; // Added for kIsWeb
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -151,6 +152,8 @@ class _RelatorioPageState extends State<RelatorioPage> {
         const SnackBar(content: Text('Gerando PDF para impressão...'), duration: Duration(seconds: 2)),
       );
 
+      final font = await PdfGoogleFonts.robotoRegular();
+      final fontBold = await PdfGoogleFonts.robotoBold();
       final pdf = pw.Document();
 
       // Agrupamento para os totais por produto
@@ -178,6 +181,10 @@ class _RelatorioPageState extends State<RelatorioPage> {
 
       pdf.addPage(
         pw.MultiPage(
+          theme: pw.ThemeData.withFont(
+            base: font,
+            bold: fontBold,
+          ),
           pageFormat: PdfPageFormat.roll80.copyWith(
             height: 1000 * PdfPageFormat.mm,
             marginLeft: 5 * PdfPageFormat.mm,
@@ -303,6 +310,8 @@ class _RelatorioPageState extends State<RelatorioPage> {
     if (reportItems.isEmpty) return;
     try {
       final pdf = pw.Document();
+      final font = await PdfGoogleFonts.robotoRegular();
+      final fontBold = await PdfGoogleFonts.robotoBold();
       
       // Agrupamento por venda (cabecalho)
       final Map<String, Map<String, dynamic>> salesSummary = {};
@@ -346,6 +355,10 @@ class _RelatorioPageState extends State<RelatorioPage> {
 
       pdf.addPage(
         pw.MultiPage(
+          theme: pw.ThemeData.withFont(
+            base: font,
+            bold: fontBold,
+          ),
           pageFormat: PdfPageFormat.a4.copyWith(
             marginLeft: 10 * PdfPageFormat.mm,
             marginRight: 10 * PdfPageFormat.mm,
@@ -456,6 +469,8 @@ class _RelatorioPageState extends State<RelatorioPage> {
     if (reportItems.isEmpty) return;
     try {
       final pdf = pw.Document();
+      final font = await PdfGoogleFonts.robotoRegular();
+      final fontBold = await PdfGoogleFonts.robotoBold();
       
       // Grouping by sale
       final Map<String, List<dynamic>> salesMap = {};
@@ -476,6 +491,10 @@ class _RelatorioPageState extends State<RelatorioPage> {
 
       pdf.addPage(
         pw.MultiPage(
+          theme: pw.ThemeData.withFont(
+            base: font,
+            bold: fontBold,
+          ),
           pageFormat: PdfPageFormat.roll80.copyWith(
             height: 1000 * PdfPageFormat.mm,
             marginLeft: 5 * PdfPageFormat.mm,
@@ -555,6 +574,12 @@ class _RelatorioPageState extends State<RelatorioPage> {
   }
 
   Future<void> _printBluetoothFullReport() async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impressão Bluetooth não é suportada no navegador. Use PDF.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
     if (reportItems.isEmpty) return;
 
     // Agrupamento por venda (cabecalho)
@@ -626,6 +651,12 @@ class _RelatorioPageState extends State<RelatorioPage> {
   }
 
   Future<void> _printBluetoothSummaryReport() async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impressão Bluetooth não é suportada no navegador. Use PDF.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
     if (reportItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Nenhum dado para imprimir'), backgroundColor: Colors.orange),
@@ -694,6 +725,12 @@ class _RelatorioPageState extends State<RelatorioPage> {
   }
 
   Future<void> _printBluetoothReport() async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impressão Bluetooth não é suportada no navegador. Use PDF.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
     if (reportItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Nenhum dado para imprimir'), backgroundColor: Colors.orange),
@@ -762,9 +799,15 @@ class _RelatorioPageState extends State<RelatorioPage> {
   Future<void> _printExpensesPdf() async {
     try {
       final pdf = pw.Document();
+      final font = await PdfGoogleFonts.robotoRegular();
+      final fontBold = await PdfGoogleFonts.robotoBold();
 
       pdf.addPage(
         pw.MultiPage(
+          theme: pw.ThemeData.withFont(
+            base: font,
+            bold: fontBold,
+          ),
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(32),
           header: (context) => pw.Column(
@@ -832,6 +875,12 @@ class _RelatorioPageState extends State<RelatorioPage> {
   }
 
   Future<void> _printExpensesBluetooth() async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impressão Bluetooth não é suportada no navegador. Use PDF.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
     if (expenseItems.isEmpty) return;
 
     final success = await BluetoothPrinterService.connectAndPrint(
