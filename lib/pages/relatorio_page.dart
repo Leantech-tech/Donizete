@@ -40,6 +40,37 @@ class _RelatorioPageState extends State<RelatorioPage> {
     return null;
   }
 
+  bool _isClienteGeloDoPorto(Map<String, dynamic> item) {
+    final cabecalho = _getSingle(item['lancto_cabecalho']);
+    final cliente = _getSingle(cabecalho?['clientes']);
+    return cliente?['is_gelo_do_porto'] == true;
+  }
+
+  double _getClienteGeloDoPortoValor(Map<String, dynamic> item) {
+    final cabecalho = _getSingle(item['lancto_cabecalho']);
+    final cliente = _getSingle(cabecalho?['clientes']);
+    return double.tryParse(cliente?['valor_gelo_do_porto']?.toString() ?? '0') ?? 0;
+  }
+
+  double _getItemBaseVenda(Map<String, dynamic> item) {
+    final vrVenda = double.tryParse(item['vr_venda']?.toString() ?? '0') ?? 0;
+    final valorGeloDoPorto = _getClienteGeloDoPortoValor(item);
+    if (_isClienteGeloDoPorto(item) && valorGeloDoPorto > 0) {
+      return valorGeloDoPorto;
+    }
+    return vrVenda;
+  }
+
+  double _getItemDesconto(Map<String, dynamic> item) {
+    return double.tryParse(item['vr_desconto']?.toString() ?? '0') ?? 0;
+  }
+
+  double _getItemUnitVenda(Map<String, dynamic> item) {
+    final baseVenda = _getItemBaseVenda(item);
+    final desconto = _getItemDesconto(item);
+    return (baseVenda - desconto) < 0 ? 0 : baseVenda - desconto;
+  }
+
   Future<void> _fetchData() async {
     if (!mounted) return;
     setState(() => isLoading = true);
@@ -69,7 +100,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
       
       var query = SupabaseService.client
           .from('lancto_itens')
-          .select('*, produtos(nome), lancto_cabecalho!inner(id, dt_emissao, is_excluido, vr_total_venda, vr_total_custo, vr_total_lucro, clientes(razao_social))')
+          .select('*, produtos(nome), lancto_cabecalho!inner(id, dt_emissao, is_excluido, vr_total_venda, vr_total_custo, vr_total_lucro, clientes(razao_social, is_gelo_do_porto, valor_gelo_do_porto))')
           .eq('lancto_cabecalho.is_excluido', false);
 
       if (_selectedRange == ReportRange.diario) {
@@ -109,10 +140,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
 
   double get _totalVendas {
     return reportItems.fold(0.0, (sum, item) {
-      final vrVenda = double.tryParse(item['vr_venda']?.toString() ?? '0') ?? 0;
-      final vrDesconto = double.tryParse(item['vr_desconto']?.toString() ?? '0') ?? 0;
+      final unitVenda = _getItemUnitVenda(item);
       final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
-      return sum + ((vrVenda - vrDesconto) * qtd);
+      return sum + (unitVenda * qtd);
     });
   }
 
@@ -163,10 +193,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
         final produtos = _getSingle(item['produtos']);
         final nomeProduto = produtos?['nome'] ?? 'N/A';
         
-        final vrVenda = double.tryParse(item['vr_venda']?.toString() ?? '0') ?? 0;
-        final vrDesconto = double.tryParse(item['vr_desconto']?.toString() ?? '0') ?? 0;
+        final unitVenda = _getItemUnitVenda(item);
         final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
-        final totalItem = (vrVenda - vrDesconto) * qtd;
+        final totalItem = unitVenda * qtd;
 
         if (productTotals.containsKey(nomeProduto)) {
           productTotals[nomeProduto]!['qtd'] += qtd;
@@ -211,9 +240,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                 final produtos = _getSingle(item['produtos']);
                 final produto = produtos?['nome'] ?? 'N/A';
                 
-                final vrVenda = double.tryParse(item['vr_venda']?.toString() ?? '0') ?? 0;
-                final vrDesconto = double.tryParse(item['vr_desconto']?.toString() ?? '0') ?? 0;
-                final unitVenda = vrVenda - vrDesconto;
+                final unitVenda = _getItemUnitVenda(item);
                 final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
                 final total = unitVenda * qtd;
 
@@ -323,8 +350,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
         final nomeCliente = cliente?['razao_social'] ?? 'N/A';
         
         final vrCusto = double.tryParse(item['vr_custo']?.toString() ?? '0') ?? 0;
-        final vrVenda = double.tryParse(item['vr_venda']?.toString() ?? '0') ?? 0;
-        final vrDesconto = double.tryParse(item['vr_desconto']?.toString() ?? '0') ?? 0;
+        final baseVenda = _getItemBaseVenda(item);
+        final vrDesconto = _getItemDesconto(item);
+        final unitVenda = _getItemUnitVenda(item);
         final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
 
         final dtEmissao = cabecalho?['dt_emissao']?.toString() ?? '';
@@ -333,9 +361,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
         if (salesSummary.containsKey(saleId)) {
           salesSummary[saleId]!['qtd'] += qtd;
           salesSummary[saleId]!['custo'] += (vrCusto * qtd);
-          salesSummary[saleId]!['venda'] += (vrVenda * qtd);
+          salesSummary[saleId]!['venda'] += (baseVenda * qtd);
           salesSummary[saleId]!['desconto'] += (vrDesconto * qtd);
-          salesSummary[saleId]!['total'] += ((vrVenda - vrDesconto) * qtd);
+          salesSummary[saleId]!['total'] += (unitVenda * qtd);
         } else {
           salesSummary[saleId] = {
             'dia': dia,
@@ -343,9 +371,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
             'cliente': nomeCliente,
             'qtd': qtd,
             'custo': (vrCusto * qtd),
-            'venda': (vrVenda * qtd),
+            'venda': (baseVenda * qtd),
             'desconto': (vrDesconto * qtd),
-            'total': ((vrVenda - vrDesconto) * qtd),
+            'total': (unitVenda * qtd),
           };
         }
       }
@@ -590,8 +618,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
       final cliente = _getSingle(cabecalho?['clientes']);
       final nomeCliente = cliente?['razao_social'] ?? 'N/A';
       
-      final vrVenda = double.tryParse(item['vr_venda']?.toString() ?? '0') ?? 0;
-      final vrDesconto = double.tryParse(item['vr_desconto']?.toString() ?? '0') ?? 0;
+      final unitVenda = _getItemUnitVenda(item);
       final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
 
       final dtEmissao = cabecalho?['dt_emissao']?.toString() ?? '';
@@ -599,14 +626,14 @@ class _RelatorioPageState extends State<RelatorioPage> {
 
       if (salesSummary.containsKey(saleId)) {
         salesSummary[saleId]!['qtd'] += qtd;
-        salesSummary[saleId]!['total'] += ((vrVenda - vrDesconto) * qtd);
+        salesSummary[saleId]!['total'] += (unitVenda * qtd);
       } else {
         salesSummary[saleId] = {
           'dia': dia,
           'data': dtEmissao,
           'cliente': nomeCliente,
           'qtd': qtd,
-          'total': ((vrVenda - vrDesconto) * qtd),
+          'total': (unitVenda * qtd),
         };
       }
     }
@@ -745,10 +772,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
       final produtos = _getSingle(item['produtos']);
       final nomeProduto = produtos?['nome'] ?? 'N/A';
       
-      final vrVenda = double.tryParse(item['vr_venda']?.toString() ?? '0') ?? 0;
-      final vrDesconto = double.tryParse(item['vr_desconto']?.toString() ?? '0') ?? 0;
+      final unitVenda = _getItemUnitVenda(item);
       final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
-      final totalItem = (vrVenda - vrDesconto) * qtd;
+      final totalItem = unitVenda * qtd;
 
       if (productTotals.containsKey(nomeProduto)) {
         productTotals[nomeProduto]!['qtd'] += qtd;
@@ -1315,16 +1341,17 @@ class _RelatorioPageState extends State<RelatorioPage> {
                           final cliente = _getSingle(cabecalho?['clientes']);
                           final produtos = _getSingle(item['produtos']);
                           
-                          final vrVenda = double.tryParse(item['vr_venda']?.toString() ?? '0') ?? 0;
-                          final vrDesconto = double.tryParse(item['vr_desconto']?.toString() ?? '0') ?? 0;
+                          final baseVenda = _getItemBaseVenda(item);
+                          final vrDesconto = _getItemDesconto(item);
+                          final unitVenda = _getItemUnitVenda(item);
                           final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
-                          final subtotal = (vrVenda - vrDesconto) * qtd;
+                          final subtotal = unitVenda * qtd;
 
                           return DataRow(cells: [
                             DataCell(Text(cliente?['razao_social'] ?? 'N/A')),
                             DataCell(Text(produtos?['nome'] ?? 'N/A')),
                             DataCell(Text(qtd.toString())),
-                            DataCell(Text(_currencyFormat.format(vrVenda))),
+                            DataCell(Text(_currencyFormat.format(baseVenda))),
                             DataCell(Text(_currencyFormat.format(vrDesconto))),
                             DataCell(Text(_currencyFormat.format(subtotal))),
                           ]);
@@ -1360,8 +1387,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
                             final nomeCliente = cliente?['razao_social'] ?? 'N/A';
                             
                             final vrCusto = double.tryParse(item['vr_custo']?.toString() ?? '0') ?? 0;
-                            final vrVenda = double.tryParse(item['vr_venda']?.toString() ?? '0') ?? 0;
-                            final vrDesconto = double.tryParse(item['vr_desconto']?.toString() ?? '0') ?? 0;
+                            final baseVenda = _getItemBaseVenda(item);
+                            final vrDesconto = _getItemDesconto(item);
+                            final unitVenda = _getItemUnitVenda(item);
                             final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
 
                             final dtEmissao = cabecalho?['dt_emissao']?.toString() ?? '';
@@ -1370,9 +1398,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
                             if (salesSummary.containsKey(saleId)) {
                               salesSummary[saleId]!['qtd'] += qtd;
                               salesSummary[saleId]!['custo'] += (vrCusto * qtd);
-                              salesSummary[saleId]!['venda'] += (vrVenda * qtd);
+                              salesSummary[saleId]!['venda'] += (baseVenda * qtd);
                               salesSummary[saleId]!['desconto'] += (vrDesconto * qtd);
-                              salesSummary[saleId]!['total'] += ((vrVenda - vrDesconto) * qtd);
+                              salesSummary[saleId]!['total'] += (unitVenda * qtd);
                             } else {
                               salesSummary[saleId] = {
                                 'dia': dia,
@@ -1380,9 +1408,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
                                 'cliente': nomeCliente,
                                 'qtd': qtd,
                                 'custo': (vrCusto * qtd),
-                                'venda': (vrVenda * qtd),
+                                'venda': (baseVenda * qtd),
                                 'desconto': (vrDesconto * qtd),
-                                'total': ((vrVenda - vrDesconto) * qtd),
+                                'total': (unitVenda * qtd),
                               };
                             }
                           }
