@@ -15,7 +15,7 @@ WORKDIR /app
 COPY . .
 
 # Roda o build (gera a pasta build/web)
-RUN flutter pub get && flutter build web --release
+RUN flutter clean && flutter pub get && flutter build web --release
 
 # Estágio de Servidor
 FROM nginx:alpine

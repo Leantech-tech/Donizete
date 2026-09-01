@@ -114,7 +114,10 @@ class _LancamentosPageState extends State<LancamentosPage> {
 
   void _updateItemPrices(Produto p) {
     if (_selectedClienteId != null) {
-      final cliente = clientes.firstWhere((c) => c.id == _selectedClienteId);
+      final cliente = clientes.firstWhere(
+        (c) => c.id == _selectedClienteId,
+        orElse: () => Cliente(tipoCliente: 'PF', razaoSocial: '', isGeloDoPorto: false),
+      );
       if (cliente.isGeloDoPorto) {
         _itemVrCusto = 0;
         _itemVrVenda = cliente.valorGeloDoPorto ?? p.vrVenda;
@@ -131,14 +134,29 @@ class _LancamentosPageState extends State<LancamentosPage> {
 
   void _addItem() {
     if (_selectedProdutoId == null) return;
-    
+
     final produto = produtos.firstWhere((p) => p.id == _selectedProdutoId);
-    
+
+    // Recalcula preço unitário com base no cliente selecionado,
+    // garantindo que clientes Gelo do Porto usem o valor cadastrado.
+    double vrCusto = _itemVrCusto;
+    double vrVenda = _itemVrVenda;
+    if (_selectedClienteId != null) {
+      final cliente = clientes.firstWhere(
+        (c) => c.id == _selectedClienteId,
+        orElse: () => Cliente(tipoCliente: 'PF', razaoSocial: '', isGeloDoPorto: false),
+      );
+      if (cliente.isGeloDoPorto) {
+        vrCusto = 0;
+        vrVenda = cliente.valorGeloDoPorto ?? produto.vrVenda;
+      }
+    }
+
     final newItem = LancamentoItem(
       produtoId: _selectedProdutoId!,
       produtoNome: produto.nome,
-      vrCusto: _itemVrCusto,
-      vrVenda: _itemVrVenda,
+      vrCusto: vrCusto,
+      vrVenda: vrVenda,
       vrDesconto: _itemVrDesconto,
       quantidade: _itemQtd,
     );
@@ -191,6 +209,28 @@ class _LancamentosPageState extends State<LancamentosPage> {
     }
 
     try {
+      // Garante que itens de clientes Gelo do Porto usem o valor cadastrado no cliente.
+      final cliente = clientes.firstWhere(
+        (c) => c.id == _selectedClienteId,
+        orElse: () => Cliente(tipoCliente: 'PF', razaoSocial: '', isGeloDoPorto: false),
+      );
+      if (cliente.isGeloDoPorto) {
+        itens = itens.map((item) {
+          final produto = produtos.firstWhere(
+            (p) => p.id == item.produtoId,
+            orElse: () => Produto(nome: item.produtoNome ?? '', vrCusto: item.vrCusto, vrVenda: item.vrVenda),
+          );
+          return LancamentoItem(
+            produtoId: item.produtoId,
+            produtoNome: item.produtoNome,
+            vrCusto: 0,
+            vrVenda: cliente.valorGeloDoPorto ?? produto.vrVenda,
+            vrDesconto: item.vrDesconto,
+            quantidade: item.quantidade,
+          );
+        }).toList();
+      }
+
       String? cabecalhoId = _editingId;
 
       final headPayload = {
@@ -565,7 +605,7 @@ class _LancamentosPageState extends State<LancamentosPage> {
               ),
               pw.Divider(),
               pw.SizedBox(height: 20),
-              pw.Center(child: pw.Text('Documento simplificado', style: const pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic))),
+              pw.Center(child: pw.Text('Documento simplificado', style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic))),
             ],
           );
         },
