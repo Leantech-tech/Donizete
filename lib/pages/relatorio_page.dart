@@ -1124,13 +1124,15 @@ class _RelatorioPageState extends State<RelatorioPage> {
                           }
                         },
                         itemBuilder: (context) => [
-                          const PopupMenuItem(
+                          PopupMenuItem(
                             value: 'full_pdf',
                             child: Row(
                               children: [
-                                Icon(Icons.picture_as_pdf, color: Color(0xFF4F46E5), size: 20),
-                                SizedBox(width: 12),
-                                Text('Imprimir Completo (PDF)'),
+                                const Icon(Icons.picture_as_pdf, color: Color(0xFF4F46E5), size: 20),
+                                const SizedBox(width: 12),
+                                Text(_selectedRange == ReportRange.anual
+                                    ? 'Imprimir Anual Completo (PDF)'
+                                    : 'Imprimir Completo (PDF)'),
                               ],
                             ),
                           ),
@@ -1145,13 +1147,15 @@ class _RelatorioPageState extends State<RelatorioPage> {
                             ),
                           ),
                           const PopupMenuDivider(),
-                          const PopupMenuItem(
+                          PopupMenuItem(
                             value: 'full_bt',
                             child: Row(
                               children: [
-                                Icon(Icons.bluetooth, color: Color(0xFF4F46E5), size: 20),
-                                SizedBox(width: 12),
-                                Text('Imprimir Completo (BT)'),
+                                const Icon(Icons.bluetooth, color: Color(0xFF4F46E5), size: 20),
+                                const SizedBox(width: 12),
+                                Text(_selectedRange == ReportRange.anual
+                                    ? 'Imprimir Anual Completo (BT)'
+                                    : 'Imprimir Completo (BT)'),
                               ],
                             ),
                           ),
@@ -1238,7 +1242,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                                   ButtonSegment(value: ReportRange.diario, label: const Text('Dia'), icon: isMobile ? null : const Icon(Icons.today, size: 16)),
                                   ButtonSegment(value: ReportRange.semanal, label: const Text('Semana'), icon: isMobile ? null : const Icon(Icons.view_week, size: 16)),
                                   ButtonSegment(value: ReportRange.mensal, label: const Text('Mês'), icon: isMobile ? null : const Icon(Icons.calendar_month, size: 16)),
-                                  ButtonSegment(value: ReportRange.anual, label: const Text('Ano'), icon: isMobile ? null : const Icon(Icons.date_range, size: 16)),
+                                  ButtonSegment(value: ReportRange.anual, label: const Text('Anual'), icon: isMobile ? null : const Icon(Icons.date_range, size: 16)),
                                 ],
                                 selected: {_selectedRange},
                                 onSelectionChanged: (Set<ReportRange> newSelection) {
