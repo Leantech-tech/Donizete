@@ -14,7 +14,7 @@ class RelatorioPage extends StatefulWidget {
   State<RelatorioPage> createState() => _RelatorioPageState();
 }
 
-enum ReportRange { diario, semanal, mensal }
+enum ReportRange { diario, semanal, mensal, anual }
 enum ReportView { lista, completo, despesas }
 
 class _RelatorioPageState extends State<RelatorioPage> {
@@ -24,6 +24,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
   DateTime _selectedDate = DateTime.now();
   ReportRange _selectedRange = ReportRange.diario;
   ReportView _selectedView = ReportView.completo;
+  int _fetchGeneration = 0;
 
   final _currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
   final _dateFormat = DateFormat('dd/MM/yyyy');
@@ -73,6 +74,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
 
   Future<void> _fetchData() async {
     if (!mounted) return;
+    final generation = ++_fetchGeneration;
     setState(() => isLoading = true);
     try {
       DateTime startDate;
@@ -93,44 +95,72 @@ class _RelatorioPageState extends State<RelatorioPage> {
           startDate = DateTime(_selectedDate.year, _selectedDate.month, 1);
           endDate = DateTime(_selectedDate.year, _selectedDate.month + 1, 1).subtract(const Duration(milliseconds: 1));
           break;
+        case ReportRange.anual:
+          startDate = DateTime(_selectedDate.year, 1, 1);
+          endDate = DateTime(_selectedDate.year + 1, 1, 1).subtract(const Duration(milliseconds: 1));
+          break;
       }
 
       final startStr = startDate.toIso8601String().split('T')[0];
       final endStr = endDate.toIso8601String().split('T')[0];
       
-      var query = SupabaseService.client
-          .from('lancto_itens')
-          .select('*, produtos(nome), lancto_cabecalho!inner(id, dt_emissao, is_excluido, vr_total_venda, vr_total_custo, vr_total_lucro, clientes(razao_social, is_gelo_do_porto, valor_gelo_do_porto))')
-          .eq('lancto_cabecalho.is_excluido', false);
+      // Supabase limits rows per request; paginate so annual totals and PDFs
+      // include the entire period rather than only the first page.
+      const pageSize = 1000;
+      final sales = <Map<String, dynamic>>[];
+      for (var offset = 0; ; offset += pageSize) {
+        var query = SupabaseService.client
+            .from('lancto_itens')
+            .select('*, produtos(nome), lancto_cabecalho!inner(id, dt_emissao, is_excluido, vr_total_venda, vr_total_custo, vr_total_lucro, clientes(razao_social, is_gelo_do_porto, valor_gelo_do_porto))')
+            .eq('lancto_cabecalho.is_excluido', false);
 
-      if (_selectedRange == ReportRange.diario) {
-        query = query.eq('lancto_cabecalho.dt_emissao', startStr);
-      } else {
-        query = query.gte('lancto_cabecalho.dt_emissao', startStr)
-                     .lte('lancto_cabecalho.dt_emissao', endStr);
+        if (_selectedRange == ReportRange.diario) {
+          query = query.eq('lancto_cabecalho.dt_emissao', startStr);
+        } else {
+          query = query.gte('lancto_cabecalho.dt_emissao', startStr)
+              .lte('lancto_cabecalho.dt_emissao', endStr);
+        }
+
+        final page = List<Map<String, dynamic>>.from(
+          await query.order('id', ascending: false).range(offset, offset + pageSize - 1),
+        );
+        if (!mounted || generation != _fetchGeneration) return;
+        sales.addAll(page);
+        if (page.length < pageSize) break;
       }
 
-      final response = await query.order('id', ascending: false);
+      final expenses = <Map<String, dynamic>>[];
+      for (var offset = 0; ; offset += pageSize) {
+        final page = List<Map<String, dynamic>>.from(
+          await SupabaseService.client
+              .from('despesas')
+              .select()
+              .eq('is_excluido', false)
+              .gte('data', startStr)
+              .lte('data', endStr)
+              .order('data', ascending: true)
+              .order('id', ascending: true)
+              .range(offset, offset + pageSize - 1),
+        );
+        if (!mounted || generation != _fetchGeneration) return;
+        expenses.addAll(page);
+        if (page.length < pageSize) break;
+      }
 
-      // Fetch expenses for the same period
-      final expenseResponse = await SupabaseService.client
-          .from('despesas')
-          .select()
-          .eq('is_excluido', false)
-          .gte('data', startStr)
-          .lte('data', endStr)
-          .order('data', ascending: true);
-
-      if (mounted) {
+      if (mounted && generation == _fetchGeneration) {
         setState(() {
-          reportItems = List<Map<String, dynamic>>.from(response);
-          expenseItems = List<Map<String, dynamic>>.from(expenseResponse);
+          reportItems = sales;
+          expenseItems = expenses;
           isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => isLoading = false);
+      if (mounted && generation == _fetchGeneration) {
+        setState(() {
+          reportItems = [];
+          expenseItems = [];
+          isLoading = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erro ao carregar dados: $e'), backgroundColor: Colors.red),
         );
@@ -214,6 +244,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
             base: font,
             bold: fontBold,
           ),
+          maxPages: 200,
           pageFormat: PdfPageFormat.roll80.copyWith(
             height: 1000 * PdfPageFormat.mm,
             marginLeft: 5 * PdfPageFormat.mm,
@@ -356,7 +387,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
         final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
 
         final dtEmissao = cabecalho?['dt_emissao']?.toString() ?? '';
-        final dia = dtEmissao.isNotEmpty ? DateTime.tryParse(dtEmissao)?.day.toString() ?? '' : '';
+        final dia = _saleDateLabel(dtEmissao);
 
         if (salesSummary.containsKey(saleId)) {
           salesSummary[saleId]!['qtd'] += qtd;
@@ -387,6 +418,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
             base: font,
             bold: fontBold,
           ),
+          maxPages: 200,
           pageFormat: PdfPageFormat.a4.copyWith(
             marginLeft: 10 * PdfPageFormat.mm,
             marginRight: 10 * PdfPageFormat.mm,
@@ -409,7 +441,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
             pw.Table(
               border: pw.TableBorder.all(width: 0.5),
               columnWidths: {
-                0: const pw.FlexColumnWidth(0.5), // Dia
+                0: pw.FlexColumnWidth(_selectedRange == ReportRange.anual ? 1 : 0.5),
                 1: const pw.FlexColumnWidth(3), // Cliente
                 2: const pw.FlexColumnWidth(1), // Qtd
                 3: const pw.FlexColumnWidth(1.5), // Custo
@@ -422,7 +454,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                   children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Dia', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(_selectedRange == ReportRange.anual ? 'Data' : 'Dia', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
                     pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Cliente', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
                     pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Qtd', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
                     pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Custo', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
@@ -490,7 +522,17 @@ class _RelatorioPageState extends State<RelatorioPage> {
         return '${_dateFormat.format(start)} a ${_dateFormat.format(end)}';
       case ReportRange.mensal:
         return DateFormat('MMMM/yyyy', 'pt_BR').format(_selectedDate);
+      case ReportRange.anual:
+        return _selectedDate.year.toString();
     }
+  }
+
+  String _saleDateLabel(String? value) {
+    final date = DateTime.tryParse(value ?? '');
+    if (date == null) return '';
+    return _selectedRange == ReportRange.anual
+        ? DateFormat('dd/MM').format(date)
+        : date.day.toString();
   }
 
   Future<void> _printSummaryReport() async {
@@ -622,7 +664,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
       final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
 
       final dtEmissao = cabecalho?['dt_emissao']?.toString() ?? '';
-      final dia = dtEmissao.isNotEmpty ? DateTime.tryParse(dtEmissao)?.day.toString() ?? '' : '';
+      final dia = _saleDateLabel(dtEmissao);
 
       if (salesSummary.containsKey(saleId)) {
         salesSummary[saleId]!['qtd'] += qtd;
@@ -647,7 +689,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
         final List<Map<String, String>> btItems = [];
         
         for (var sale in sortedSales) {
-          final diaPrefix = sale['dia'] != null && sale['dia'] != '' ? 'D:${sale['dia']} - ' : '';
+          final diaPrefix = sale['dia'] != null && sale['dia'] != '' ? '${_selectedRange == ReportRange.anual ? 'Data' : 'D'}:${sale['dia']} - ' : '';
           btItems.add({
             'name': '$diaPrefix${sale['cliente']}',
             'qty': '${sale['qtd']}',
@@ -739,7 +781,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
 
         return BluetoothPrinterService.instance.printReport(
           title: 'RESUMO DE VENDAS',
-          date: _dateFormat.format(_selectedDate),
+          date: _getRangeLabel(),
           items: btItems,
           totals: {}, 
         );
@@ -810,7 +852,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
 
         return BluetoothPrinterService.instance.printReport(
           title: 'RELATÓRIO',
-          date: _dateFormat.format(_selectedDate),
+          date: _getRangeLabel(),
           items: items,
           totals: totals,
         );
@@ -834,6 +876,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
             base: font,
             bold: fontBold,
           ),
+          maxPages: 200,
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(32),
           header: (context) => pw.Column(
@@ -853,7 +896,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
             pw.Table(
               border: pw.TableBorder.all(width: 0.5),
               columnWidths: {
-                0: const pw.FlexColumnWidth(0.5), // Dia
+                0: pw.FlexColumnWidth(_selectedRange == ReportRange.anual ? 1 : 0.5),
                 1: const pw.FlexColumnWidth(3), // Beneficiário
                 2: const pw.FlexColumnWidth(2), // Referente
                 3: const pw.FlexColumnWidth(1.5), // Valor
@@ -862,17 +905,16 @@ class _RelatorioPageState extends State<RelatorioPage> {
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                   children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Dia', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(_selectedRange == ReportRange.anual ? 'Data' : 'Dia', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
                     pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Beneficiário', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
                     pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Referente', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
                     pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('Valor', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
                   ],
                 ),
                 ...expenseItems.map((e) {
-                  final data = DateTime.tryParse(e['data']?.toString() ?? '') ?? DateTime.now();
                   return pw.TableRow(
                     children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(data.day.toString(), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 9))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(_saleDateLabel(e['data']?.toString()), textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 9))),
                       pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(e['beneficiario'] ?? '', style: const pw.TextStyle(fontSize: 9))),
                       pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(e['referente'] ?? '', style: const pw.TextStyle(fontSize: 9))),
                       pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(_currencyFormat.format(e['valor'] ?? 0), textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 9))),
@@ -913,9 +955,8 @@ class _RelatorioPageState extends State<RelatorioPage> {
       context,
       printFunction: () async {
         final items = expenseItems.map((e) {
-          final data = DateTime.tryParse(e['data']?.toString() ?? '') ?? DateTime.now();
           return {
-            'dia': data.day.toString(),
+            'dia': _saleDateLabel(e['data']?.toString()),
             'beneficiary': e['beneficiario']?.toString() ?? '',
             'value': _currencyFormat.format(e['valor'] ?? 0),
           };
@@ -1070,7 +1111,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                       style: TextStyle(fontSize: isMobile ? 18 : 20, fontWeight: FontWeight.bold),
                     ),
                     
-                    if (!isLoading && reportItems.isNotEmpty)
+                    if (!isLoading && (reportItems.isNotEmpty || expenseItems.isNotEmpty))
                       PopupMenuButton<String>(
                         onSelected: (value) {
                           switch (value) {
@@ -1183,8 +1224,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                   runSpacing: 16,
                   crossAxisAlignment: WrapCrossAlignment.end,
                   children: [
-                    if (!isLoading && reportItems.isNotEmpty)
-                      Column(
+                    Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('Configurações do Relatório', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
@@ -1194,10 +1234,11 @@ class _RelatorioPageState extends State<RelatorioPage> {
                             runSpacing: 12,
                             children: [
                               SegmentedButton<ReportRange>(
-                                segments: const [
-                                  ButtonSegment(value: ReportRange.diario, label: Text('Dia'), icon: Icon(Icons.today, size: 16)),
-                                  ButtonSegment(value: ReportRange.semanal, label: Text('Semana'), icon: Icon(Icons.view_week, size: 16)),
-                                  ButtonSegment(value: ReportRange.mensal, label: Text('Mês'), icon: Icon(Icons.calendar_month, size: 16)),
+                                segments: [
+                                  ButtonSegment(value: ReportRange.diario, label: const Text('Dia'), icon: isMobile ? null : const Icon(Icons.today, size: 16)),
+                                  ButtonSegment(value: ReportRange.semanal, label: const Text('Semana'), icon: isMobile ? null : const Icon(Icons.view_week, size: 16)),
+                                  ButtonSegment(value: ReportRange.mensal, label: const Text('Mês'), icon: isMobile ? null : const Icon(Icons.calendar_month, size: 16)),
+                                  ButtonSegment(value: ReportRange.anual, label: const Text('Ano'), icon: isMobile ? null : const Icon(Icons.date_range, size: 16)),
                                 ],
                                 selected: {_selectedRange},
                                 onSelectionChanged: (Set<ReportRange> newSelection) {
@@ -1220,7 +1261,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Data de Referência', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text(_selectedRange == ReportRange.anual ? 'Ano de Referência' : 'Data de Referência', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
                           onPressed: () async {
@@ -1229,6 +1270,9 @@ class _RelatorioPageState extends State<RelatorioPage> {
                               initialDate: _selectedDate,
                               firstDate: DateTime(2020),
                               lastDate: DateTime(2030),
+                              initialDatePickerMode: _selectedRange == ReportRange.anual
+                                  ? DatePickerMode.year
+                                  : DatePickerMode.day,
                             );
                             if (picked != null) {
                               setState(() => _selectedDate = picked);
@@ -1236,7 +1280,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                             }
                           },
                           icon: const Icon(Icons.calendar_today, size: 16),
-                          label: Text(_dateFormat.format(_selectedDate)),
+                          label: Text(_selectedRange == ReportRange.anual ? _selectedDate.year.toString() : _dateFormat.format(_selectedDate)),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                             side: BorderSide(color: Colors.grey.shade300),
@@ -1245,7 +1289,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                         ),
                       ],
                     ),
-                    if (!isLoading && reportItems.isNotEmpty)
+                    if (!isLoading && (reportItems.isNotEmpty || expenseItems.isNotEmpty))
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                         decoration: BoxDecoration(
@@ -1267,7 +1311,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                   ],
                 ),
                 // Cards de Resumo
-                if (!isLoading && reportItems.isNotEmpty) ...[
+                if (!isLoading && (reportItems.isNotEmpty || expenseItems.isNotEmpty)) ...[
                   const SizedBox(height: 24),
                   Wrap(
                     spacing: 16,
@@ -1314,10 +1358,12 @@ class _RelatorioPageState extends State<RelatorioPage> {
                     padding: EdgeInsets.all(32.0),
                     child: CircularProgressIndicator(),
                   ))
-                else if (reportItems.isEmpty)
+                else if (_selectedView == ReportView.despesas
+                    ? expenseItems.isEmpty
+                    : reportItems.isEmpty)
                   const Center(child: Padding(
                     padding: EdgeInsets.all(32.0),
-                    child: Text('Nenhum lançamento encontrado para a data selecionada.'),
+                    child: Text('Nenhum lançamento encontrado para o período selecionado.'),
                   ))
                 else if (_selectedView == ReportView.lista)
                   Scrollbar(
@@ -1368,8 +1414,8 @@ class _RelatorioPageState extends State<RelatorioPage> {
                       scrollDirection: Axis.horizontal,
                       child: DataTable(
                         columnSpacing: isMobile ? 20 : 40,
-                        columns: const [
-                          DataColumn(label: Text('Dia')),
+                        columns: [
+                          DataColumn(label: Text(_selectedRange == ReportRange.anual ? 'Data' : 'Dia')),
                           DataColumn(label: Text('Cliente')),
                           DataColumn(label: Text('Qtd Itens')),
                           DataColumn(label: Text('Custo Total')),
@@ -1393,7 +1439,7 @@ class _RelatorioPageState extends State<RelatorioPage> {
                             final qtd = int.tryParse(item['quantidade']?.toString() ?? '1') ?? 1;
 
                             final dtEmissao = cabecalho?['dt_emissao']?.toString() ?? '';
-                            final dia = dtEmissao.isNotEmpty ? DateTime.tryParse(dtEmissao)?.day.toString() ?? '' : '';
+                            final dia = _saleDateLabel(dtEmissao);
 
                             if (salesSummary.containsKey(saleId)) {
                               salesSummary[saleId]!['qtd'] += qtd;
@@ -1440,16 +1486,15 @@ class _RelatorioPageState extends State<RelatorioPage> {
                       scrollDirection: Axis.horizontal,
                       child: DataTable(
                         columnSpacing: isMobile ? 20 : 40,
-                        columns: const [
-                          DataColumn(label: Text('Dia')),
+                        columns: [
+                          DataColumn(label: Text(_selectedRange == ReportRange.anual ? 'Data' : 'Dia')),
                           DataColumn(label: Text('Beneficiário')),
                           DataColumn(label: Text('Referente')),
                           DataColumn(label: Text('Valor')),
                         ],
                         rows: expenseItems.map((e) {
-                          final data = DateTime.tryParse(e['data']?.toString() ?? '') ?? DateTime.now();
                           return DataRow(cells: [
-                            DataCell(Text(data.day.toString())),
+                            DataCell(Text(_saleDateLabel(e['data']?.toString()))),
                             DataCell(Text(e['beneficiario'] ?? '')),
                             DataCell(Text(e['referente'] ?? '')),
                             DataCell(Text(_currencyFormat.format(e['valor'] ?? 0))),
